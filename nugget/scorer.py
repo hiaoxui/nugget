@@ -1,5 +1,4 @@
 from typing import *
-from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
@@ -33,9 +32,12 @@ class Nuggets:
         return selected_indices
 
     def sort(self) -> "Nuggets":
-        ars = self.index.argsort(1)
+        index_to_sort = self.index.clone()
+        index_to_sort[~self.mask] += self.encoding.shape[1] * 100
+        ars = index_to_sort.argsort(1)
         encoding = self.encoding.gather(1, ars.unsqueeze(2).expand_as(self.encoding))
         mask = self.mask.gather(1, ars)
+        assert (mask == self.mask).all()
         scores = self.scores.gather(1, ars)
         index = self.index.gather(1, ars)
         ret = Nuggets(encoding, mask, scores, index, self.all_scores)
@@ -72,7 +74,7 @@ class NuggetScorer(torch.nn.Module):
         enc = hidden_states.gather(1, indices[:, :, None].expand(-1, -1, hidden_states.shape[2]))
         nugget_scores = scores.gather(1, indices)
 
-        return Nuggets(enc, nugget_mask, nugget_scores, indices, scores)
+        return Nuggets(enc, nugget_mask, nugget_scores, indices, scores).sort()
 
     def score_context(self, nuggets: Nuggets):
         return self.feeder(nuggets.scores)

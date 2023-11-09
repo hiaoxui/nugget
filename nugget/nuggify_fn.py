@@ -1,12 +1,5 @@
-from typing import *
-from copy import deepcopy
-
-import torch
-from transformers import PreTrainedModel
-
 from .adaptors.bert import adapt_bert
 from .adaptors.bart import adapt_bart
-from .adaptors.score_feeder import NuggetScoreFeeder
 from .scorer import NuggetScorer
 
 
