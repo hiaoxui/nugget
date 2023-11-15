@@ -14,7 +14,7 @@ class NuggetScorer(torch.nn.Module):
         self.base_transformer.requires_grad_(False)
         self.non_linear = torch.nn.Sequential(
             torch.nn.Linear(d_model, d_model, True),
-            torch.nn.GELU(),
+            torch.nn.ReLU(True),
             torch.nn.Linear(d_model, 1, True)
         )
         self.value_ffn = torch.nn.Linear(d_model, d_model, True) if value_ffn else None
