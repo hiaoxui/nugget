@@ -4,12 +4,22 @@ import torch
 
 
 class NuggetScoreFeeder:
-    def __init__(self):
+    def __init__(self, straight_through: bool, enable: bool = True):
+        self.straight_through, self._enable = straight_through, enable
         self.scores: Optional[torch.Tensor] = None
 
     def __call__(self, scores: torch.Tensor):
-        self.scores = scores
+        if self._enable:
+            if self.straight_through:
+                self.scores = scores - scores.detach()
+            else:
+                self.scores = scores
         return self
+
+    def enable(self, option: bool):
+        self._enable = option
+        if not option:
+            self.scores = None
 
     def __enter__(self):
         return self

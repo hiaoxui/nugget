@@ -69,7 +69,7 @@ class NuggetBertSelfAttention(BertSelfAttention):
             # shape of attention_scores (bsz, heads, query_tokens, key_tokens)
             # shape of self.nugget_attn.scores (bsz, key_tokens)
             nugget_score_ext = self.nugget_score_feeder.scores[:, None, None, :]
-            attention_scores = attention_scores + nugget_score_ext - nugget_score_ext.detach()
+            attention_scores = attention_scores + nugget_score_ext
         # End of Nugget
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":

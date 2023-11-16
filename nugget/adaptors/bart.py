@@ -87,7 +87,7 @@ class NuggetBartAttention(BartAttention):
             # shape of attention_scores (bsz, heads, query_tokens, key_tokens)
             # shape of self.nugget_attn.scores (bsz, key_tokens)
             scores_ext = scores[:, None, None, :].expand(-1, self.num_heads, 1, -1).flatten(0, 1)
-            attn_weights = attn_weights + scores_ext - scores_ext.detach()
+            attn_weights = attn_weights + scores_ext
         # End of Nugget
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
@@ -147,9 +147,8 @@ class NuggetBartAttention(BartAttention):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-def adapt_bart(base_model, scorer_layer, residual_start, residual_end):
+def adapt_bart(feeder: NuggetScoreFeeder, base_model, scorer_layer, residual_start, residual_end):
     # the base_model is assumed to of type (M)BartForConditionalGeneration
-    feeder = NuggetScoreFeeder()
     for i_layer in range(residual_start, residual_end):
         attn_module = base_model.model.decoder.layers[i_layer].encoder_attn
         attn_module.__class__ = NuggetBartAttention
