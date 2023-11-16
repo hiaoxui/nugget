@@ -1,5 +1,6 @@
 from .adaptors.bert import adapt_bert
 from .adaptors.bart import adapt_bart
+from .adaptors.t5 import adapt_t5
 from .scorer import NuggetScorer
 from .adaptors.score_feeder import NuggetScoreFeeder
 
@@ -24,6 +25,8 @@ def nuggify(
         adapt_fn = adapt_bert
     elif model.config.model_type in ['bart', 'mbart']:
         adapt_fn = adapt_bart
+    elif model.config.model_type in ['t5']:
+        adapt_fn = adapt_t5
     else:
         raise NotImplementedError
     feeder = NuggetScoreFeeder(straight_through, enable=True)
