@@ -10,7 +10,6 @@ from .score_feeder import NuggetScoreFeeder
 
 class NuggetT5Attention(T5Attention):
     # Adapted from Huggingface/Transformers v4.35.2
-    # This is used for both Bart and MBart as they share identical attention modules
     nugget_score_feeder: Optional[NuggetScoreFeeder] = None
 
     def forward(
