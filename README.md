@@ -16,11 +16,11 @@ Supported models:
 Supporting new models should not be hard for standard huggingface transformers.
 Refer to the `adaptor` folder to adapt to new models.
 
-# Difference between this package and the published papers and the associated codebase
+# Difference between this package and the published papers
 
 ## Residual connection
 
-In papers, the residual connection in the paper directly adds nugget scores to the attention weights
+In papers, the residual connection directly adds nugget scores to the attention weights
 
 $$a_{i,j} = (\mathbf{W}^Q \mathbf{x}_i)^\top(\mathbf{W}^K \mathbf{z}_j) + s_j$$
 
