@@ -53,7 +53,7 @@ from nugget import nuggify
 model_name = 'facebook/bart-base'
 ratio = 0.1
 
-model, tok = AutoModelFOrSeq2SeqLM.from_pretrained(model_name), AutoTokenizer.from_pretrained(model_name)
+model, tok = AutoModelForSeq2SeqLM.from_pretrained(model_name), AutoTokenizer.from_pretrained(model_name)
 inputs = tok('hello world', return_tensors='pt')
 
 scorer, encoder, decoder = nuggify(model)
