@@ -1,6 +1,7 @@
 from .adaptors.bert import adapt_bert
 from .adaptors.bart import adapt_bart
 from .adaptors.t5 import adapt_t5
+from .adaptors.llama import adapt_llama
 from .scorer import NuggetScorer
 from .adaptors.score_feeder import NuggetScoreFeeder
 
@@ -23,13 +24,19 @@ def nuggify(
 
     if model.config.model_type in ['bert']:
         adapt_fn = adapt_bert
+        hidden_size = model.config.d_model
     elif model.config.model_type in ['bart', 'mbart']:
         adapt_fn = adapt_bart
+        hidden_size = model.config.d_model
     elif model.config.model_type in ['t5']:
         adapt_fn = adapt_t5
+        hidden_size = model.config.d_model
+    elif model.config.model_type in ['llama']:
+        adapt_fn = adapt_llama
+        hidden_size = model.config.hidden_size
     else:
         raise NotImplementedError
     feeder = NuggetScoreFeeder(straight_through, enable=True)
     feeder, scorer_feat, encoder, decoder = adapt_fn(feeder, model, scorer_layer, residual_start, residual_end)
-    scorer = NuggetScorer(scorer_feat, model.config.d_model, feeder, value_ffn)
+    scorer = NuggetScorer(scorer_feat, hidden_size, feeder, value_ffn)
     return scorer, encoder, decoder

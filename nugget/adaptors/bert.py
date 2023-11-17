@@ -123,8 +123,7 @@ class NuggetBertSelfAttention(BertSelfAttention):
         return outputs
 
 
-def adapt_bert(base_model, scorer_layer, residual_start, residual_end):
-    feeder = NuggetScoreFeeder()
+def adapt_bert(feeder, base_model, scorer_layer, residual_start, residual_end):
     for i_layer in range(residual_start, residual_end):
         attn_module = base_model.encoder.layer[i_layer].attention.self
         attn_module.__class__ = NuggetBertSelfAttention

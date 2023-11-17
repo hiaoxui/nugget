@@ -3,6 +3,8 @@ from dataclasses import dataclass
 
 import torch
 
+from .utils.rich_tuple import PastKeyValues
+
 
 @dataclass
 class Nuggets:
@@ -16,10 +18,10 @@ class Nuggets:
     `all_scores`, shaped as (bsz, #token), is the logits of all tokens. It should be masked with a mask that
     is not present in this tuple.
     """
-    encoding: Optional[torch.Tensor]
+    encoding: Optional[Union[torch.Tensor, PastKeyValues]]
     mask: Optional[torch.Tensor]
-    scores: Optional[torch.Tensor]
-    index: Optional[torch.Tensor]
+    scores: Optional[torch.Tensor] = None
+    index: Optional[torch.Tensor] = None
     all_scores: Optional[torch.Tensor] = None
 
     @property
@@ -28,13 +30,3 @@ class Nuggets:
         for ma, ti in zip(self.mask, self.index):
             selected_indices.append(ti[ma].cpu().tolist())
         return selected_indices
-
-    def sort(self) -> "Nuggets":
-        index_to_sort = self.index.clone()
-        index_to_sort[~self.mask] += 9999999
-        ars = index_to_sort.argsort(1)
-        return Nuggets(
-            encoding=self.encoding.gather(1, ars.unsqueeze(2).expand_as(self.encoding)),
-            mask=self.mask.gather(1, ars), scores=self.scores.gather(1, ars),
-            index=self.index.gather(1, ars), all_scores=self.all_scores,
-        )
