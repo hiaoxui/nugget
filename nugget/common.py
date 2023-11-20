@@ -30,3 +30,28 @@ class Nuggets:
         for ma, ti in zip(self.mask, self.index):
             selected_indices.append(ti[ma].cpu().tolist())
         return selected_indices
+
+
+@dataclass
+class NuggetInspect:
+    # For inspection; contains both tokens and nuggets, but only a single instance
+    tokens: Union[List[int], List[str]]
+    index: List[int]
+    scores: List[float]
+
+    def to_tokens(self, tokenizer):
+        tokens = tokenizer.convert_ids_to_tokens(self.tokens)
+        is_bpe = any(tok.startswith('▁') or tok.startswith('Ġ') for tok in tokens)
+        converted = []
+        for tok in tokens:
+            if is_bpe:
+                if tok.startswith('▁') or tok.startswith('Ġ'):
+                    converted.append(' ' + tok[1:])
+                else:
+                    converted.append(tok)
+            else:
+                if tok.startswith('##'):
+                    converted.append(tok[2:])
+                else:
+                    converted.append(' ' + tok)
+        self.tokens = converted
