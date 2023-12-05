@@ -10,9 +10,9 @@ from lightning.pytorch.utilities.types import STEP_OUTPUT
 import lightning.pytorch as pl
 
 from nugget.common import Nuggets, NuggetInspect
-from nugget.utils.tokenizer_wihtout_warning import load_tokenizer
 from nugget.inspect.highlight import gen_highlight
 from nugget.inspect.composition_plot import composition_plot
+from dlutils.tokenizer_wihtout_warning import load_tokenizer
 
 
 def collection_and_plot(inspect_path: str, pretrained: str):
