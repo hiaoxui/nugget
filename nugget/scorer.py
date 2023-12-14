@@ -9,10 +9,11 @@ from .utils.rich_tuple import PastKeyValues
 class NuggetScorer(torch.nn.Module):
     def __init__(
             self, base_transformer, d_model: int, feeder: NuggetScoreFeeder,
-            value_ffn: bool,
+            value_ffn: bool, ratio: float
     ):
         super().__init__()
         self.base_transformer, self.feeder = base_transformer, feeder
+        self.ratio = ratio
         self.base_transformer.requires_grad_(False)
         self.non_linear = torch.nn.Sequential(
             torch.nn.Linear(d_model, d_model, True),
@@ -25,8 +26,7 @@ class NuggetScorer(torch.nn.Module):
 
     def forward(
             self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
-            hidden_states: Union[torch.Tensor, PastKeyValues],
-            nugget_ratio: float, **kwargs
+            hidden_states: Union[torch.Tensor, PastKeyValues], **kwargs
     ) -> Nuggets:
         transformer_out = self.base_transformer(
             input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True, **kwargs
@@ -40,7 +40,7 @@ class NuggetScorer(torch.nn.Module):
             )
 
         n_token = attention_mask.sum(dim=1)
-        n_nugget = torch.ceil(n_token * nugget_ratio).to(torch.int64)
+        n_nugget = torch.ceil(n_token * self.ratio).to(torch.int64)
         n_nugget[n_nugget == 0] = 1
         n_nugget[n_nugget > n_token] = n_token[n_nugget > n_token]
         max_nugget = n_nugget.max()

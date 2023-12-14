@@ -1,3 +1,4 @@
+from typing import Optional
 import torch
 
 from .adaptors.bert import adapt_bert
@@ -10,7 +11,7 @@ from .adaptors.score_feeder import NuggetScoreFeeder
 
 def nuggify(
         model, scorer_layer: int = 3, residual_start: int = 0, residual_end: int = -1,
-        value_ffn: bool = True, straight_through: bool = True,
+        value_ffn: bool = True, straight_through: bool = True, ratio: Optional[float] = None,
 ):
     """
     :param model: A base Huggingface/Transformer model
@@ -20,6 +21,7 @@ def nuggify(
     layers[residual_start:residual_end] in decoder.
     :param value_ffn: Append a value FFN to the nugget encodings.
     :param straight_through: If True, will subtract the score value from the forward pass; otherwise
+    :param ratio: Nugget ratio.
     the nugget score could affect the forward pass.
     """
     residual_end = residual_end if residual_end > 0 else model.config.num_hidden_layers
@@ -40,8 +42,11 @@ def nuggify(
         raise NotImplementedError
     feeder = NuggetScoreFeeder(straight_through, enable=True)
     feeder, scorer_feat, encoder, decoder = adapt_fn(feeder, model, scorer_layer, residual_start, residual_end)
-    scorer = NuggetScorer(scorer_feat, hidden_size, feeder, value_ffn)
-    nugget_kwargs = dict(scorer_layer=3, residual_start=0, residual_end=-1, value_ffn=True, straight_through=True)
+    scorer = NuggetScorer(scorer_feat, hidden_size, feeder, value_ffn, ratio)
+    nugget_kwargs = dict(
+        scorer_layer=3, residual_start=0, residual_end=-1, value_ffn=True, straight_through=True,
+        ratio=ratio,
+    )
     return scorer, encoder, decoder, nugget_kwargs
 
 
