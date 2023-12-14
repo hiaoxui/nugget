@@ -1,3 +1,5 @@
+import torch
+
 from .adaptors.bert import adapt_bert
 from .adaptors.bart import adapt_bart
 from .adaptors.t5 import adapt_t5
@@ -39,4 +41,22 @@ def nuggify(
     feeder = NuggetScoreFeeder(straight_through, enable=True)
     feeder, scorer_feat, encoder, decoder = adapt_fn(feeder, model, scorer_layer, residual_start, residual_end)
     scorer = NuggetScorer(scorer_feat, hidden_size, feeder, value_ffn)
-    return scorer, encoder, decoder
+    nugget_kwargs = dict(scorer_layer=3, residual_start=0, residual_end=-1, value_ffn=True, straight_through=True)
+    return scorer, encoder, decoder, nugget_kwargs
+
+
+def save_nuggets(scorer: NuggetScorer, save_path: str, nugget_kwargs):
+    states = {'non_linear': scorer.non_linear.state_dict()}
+    if scorer.value_ffn is not None:
+        states['value_ffn'] = scorer.value_ffn.state_dict()
+    dump = {'scorer_states': states, 'kwargs': nugget_kwargs}
+    torch.save(dump, save_path)
+
+
+def load_nuggets(model, save_path: str):
+    loaded = torch.load(save_path, map_location='cpu')
+    scorer, encoder, decoder, nugget_kwargs = nuggify(model, **loaded['kwargs'])
+    scorer.non_linear.load_state_dict(loaded['scorer_states']['non_linear'])
+    if scorer.value_ffn is not None:
+        scorer.value_ffn.load_state_dict(loaded['scorer_states']['value_ffn'])
+    return scorer, encoder, decoder, nugget_kwargs
