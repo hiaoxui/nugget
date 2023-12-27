@@ -26,12 +26,13 @@ class NuggetScorer(torch.nn.Module):
 
     def forward(
             self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
-            hidden_states: Union[torch.Tensor, PastKeyValues], **kwargs
-    ) -> Nuggets:
+            hidden_states: Union[torch.Tensor, PastKeyValues, None], return_hidden_states: bool = False, **kwargs
+    ) -> Union[Nuggets, Tuple[Nuggets, PastKeyValues]]:
         transformer_out = self.base_transformer(
-            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True, **kwargs
-        ).hidden_states[-1]
-        scores = self.non_linear(transformer_out).squeeze(-1)
+            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True,
+            **kwargs
+        )
+        scores = self.non_linear(transformer_out.hidden_states[-1]).squeeze(2)
         scores[~attention_mask.to(dtype=torch.bool)] = torch.finfo(scores.dtype).min
         if self.force_last:
             scores = scores.scatter(
@@ -55,12 +56,18 @@ class NuggetScorer(torch.nn.Module):
             enc = hidden_states.gather(1, indices[:, :, None].expand(-1, -1, hidden_states.shape[2]))
             if self.value_ffn is not None:
                 enc = self.value_ffn(enc)
-        else:
+        elif isinstance(hidden_states, PastKeyValues):
             # is decoder-only models
             enc = hidden_states.gather(indices)
+        else:
+            enc = None
         nugget_scores = scores.gather(1, indices)
 
-        return Nuggets(enc, nugget_mask, nugget_scores, indices, scores)
+        nuggets = Nuggets(enc, nugget_mask, nugget_scores, indices, scores)
+        if not return_hidden_states:
+            return nuggets
+        else:
+            return nuggets, PastKeyValues(transformer_out.hidden_states)
 
     def score_context(self, nuggets: Nuggets):
         return self.feeder(nuggets.scores)
