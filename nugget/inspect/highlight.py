@@ -1,8 +1,7 @@
 import html
-import os
 from typing import *
 
-from nugget.common import NuggetInspect
+from nugget.utils.types import NuggetInspect
 
 
 html_head = '''<!DOCTYPE html>

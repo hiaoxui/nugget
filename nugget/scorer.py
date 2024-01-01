@@ -1,9 +1,10 @@
-import torch
 from typing import *
 
+from transformers import DynamicCache
+import torch
+
 from .adaptors.score_feeder import NuggetScoreFeeder
-from .common import Nuggets
-from .utils.rich_tuple import PastKeyValues
+from .utils.types import Nuggets, gather_cache
 
 
 class NuggetScorer(torch.nn.Module):
@@ -26,20 +27,25 @@ class NuggetScorer(torch.nn.Module):
 
     def forward(
             self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
-            hidden_states: Union[torch.Tensor, PastKeyValues, None], return_hidden_states: bool = False, **kwargs
-    ) -> Union[Nuggets, Tuple[Nuggets, PastKeyValues]]:
+            hidden_states: Union[torch.Tensor, DynamicCache, None],
+            position_ids: Optional[torch.Tensor] = None, use_cache: bool = False, **kwargs
+    ) -> Union[Nuggets, Tuple[Nuggets, Nuggets]]:
+        # `position_ids`: The position IDs of the associated tokens. Its length can be longer than
+        # `input_ids` as base_transformer can take past key values.
+        bsz, seq_len = input_ids.shape
         transformer_out = self.base_transformer(
             input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True,
-            **kwargs
+            position_ids=position_ids, use_cache=use_cache, **kwargs,
         )
+        # attention_mask could be longer than sequence length if past_kv are passed.
+        attention_mask = attention_mask[:, -seq_len:]
         scores = self.non_linear(transformer_out.hidden_states[-1]).squeeze(2)
         scores[~attention_mask.to(dtype=torch.bool)] = torch.finfo(scores.dtype).min
         if self.force_last:
+            last_index = torch.clamp(attention_mask.sum(1, keepdim=True)-1, 0, None)
             scores = scores.scatter(
-                1, attention_mask.sum(1, keepdim=True)-1,
-                scores.new_full([scores.shape[0], 1], torch.finfo(scores.dtype).max)
+                1, last_index, scores.new_full([scores.shape[0], 1], torch.finfo(scores.dtype).max)
             )
-
         n_token = attention_mask.sum(dim=1)
         n_nugget = torch.ceil(n_token * self.ratio).to(torch.int64)
         n_nugget[n_nugget == 0] = 1
@@ -56,18 +62,26 @@ class NuggetScorer(torch.nn.Module):
             enc = hidden_states.gather(1, indices[:, :, None].expand(-1, -1, hidden_states.shape[2]))
             if self.value_ffn is not None:
                 enc = self.value_ffn(enc)
-        elif isinstance(hidden_states, PastKeyValues):
+        elif isinstance(hidden_states, DynamicCache):
             # is decoder-only models
-            enc = hidden_states.gather(indices)
+            enc = gather_cache(hidden_states, indices)
         else:
             enc = None
         nugget_scores = scores.gather(1, indices)
 
         nuggets = Nuggets(enc, nugget_mask, nugget_scores, indices, scores)
-        if not return_hidden_states:
+
+        # `this_pid` is the position IDs of this batch of tokens
+        if position_ids is not None:
+            this_pid = position_ids[:, -seq_len:]
+        else:
+            this_pid = torch.arange(seq_len, device=input_ids.device)[None, :].expand(bsz, -1)
+        nuggets.position_ids = this_pid.gather(1, indices)
+
+        if not use_cache:
             return nuggets
         else:
-            return nuggets, PastKeyValues(transformer_out.hidden_states)
+            return nuggets, Nuggets(transformer_out.past_key_values, attention_mask, position_ids=this_pid)
 
     def score_context(self, nuggets: Nuggets):
         return self.feeder(nuggets.scores)

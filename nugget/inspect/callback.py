@@ -9,7 +9,7 @@ from lightning.pytorch import Trainer, LightningModule
 from lightning.pytorch.utilities.types import STEP_OUTPUT
 import lightning.pytorch as pl
 
-from nugget.common import Nuggets, NuggetInspect
+from nugget.utils.types import Nuggets, NuggetInspect
 from nugget.inspect.highlight import gen_highlight
 from nugget.inspect.composition_plot import composition_plot
 from dlutils.tokenizer_wihtout_warning import load_tokenizer

@@ -4,7 +4,7 @@ from collections import defaultdict
 from matplotlib import pyplot as plt
 import numpy as np
 
-from nugget.common import NuggetInspect
+from nugget.utils.types import NuggetInspect
 
 
 def composition_plot(outs: List[NuggetInspect], save_path: str):
