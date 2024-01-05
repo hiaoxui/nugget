@@ -20,8 +20,9 @@ def gather_cache(cache: DynamicCache, index: Tensor):
     return ret
 
 
-def cat_cache(past_caches: List["DynamicCache"]) -> "DynamicCache":
+def cat_cache(past_caches: List[DynamicCache]) -> DynamicCache:
     # concatenate key values into one
+    past_caches = [cache for cache in past_caches if cache is not None and cache.seen_tokens > 0]
     if len(past_caches) == 0:
         return DynamicCache()
     if len(past_caches) == 1:

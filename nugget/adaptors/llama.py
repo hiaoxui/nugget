@@ -284,5 +284,6 @@ def adapt_llama(
     nugget_feat.layers = nugget_feat.layers[:scorer_layer]
     # use NuggetLlamaModel
     llama.model.__class__ = NuggetLlamaModel
+    llama.model._use_sdpa = False
     # encoder is the same as decoder
     return feeder, nugget_feat, None, llama
