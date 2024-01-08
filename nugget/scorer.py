@@ -4,7 +4,7 @@ from transformers import DynamicCache
 import torch
 
 from .adaptors.score_feeder import NuggetScoreFeeder
-from .utils.types import Nuggets, gather_cache
+from .utils.types import Nuggets, gather_cache, truncate_pkv
 
 
 class NuggetScorer(torch.nn.Module):
@@ -81,7 +81,8 @@ class NuggetScorer(torch.nn.Module):
         if not use_cache:
             return nuggets
         else:
-            return nuggets, Nuggets(transformer_out.past_key_values, attention_mask, position_ids=this_pid)
+            pkv = truncate_pkv(transformer_out.past_key_values, seq_len)
+            return nuggets, Nuggets(pkv, attention_mask, position_ids=this_pid)
 
     def score_context(self, nuggets: Nuggets):
         return self.feeder(nuggets.scores)

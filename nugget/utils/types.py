@@ -6,6 +6,14 @@ import torch
 from torch import Tensor
 
 
+def truncate_pkv(past_kv: DynamicCache, k: int) -> DynamicCache:
+    ret = DynamicCache()
+    ret.key_cache = [layer[:, :, -k:] for layer in past_kv.key_cache]
+    ret.value_cache = [layer[:, :, -k:] for layer in past_kv.value_cache]
+    ret.seen_tokens = k
+    return ret
+
+
 def gather_cache(cache: DynamicCache, index: Tensor):
     bsz, n_head, n_token, head_dim = cache.key_cache[0].shape
     n_layer = len(cache.key_cache)
@@ -25,12 +33,11 @@ def cat_cache(past_caches: List[DynamicCache]) -> DynamicCache:
     past_caches = [cache for cache in past_caches if cache is not None and cache.seen_tokens > 0]
     if len(past_caches) == 0:
         return DynamicCache()
-    if len(past_caches) == 1:
-        return past_caches[0]
     ret = DynamicCache()
-    for i_layer in range(len(past_caches)):
+    for i_layer in range(len(past_caches[0])):
         ret.key_cache.append(torch.cat([cache.key_cache[i_layer] for cache in past_caches], dim=2))
         ret.value_cache.append(torch.cat([cache.value_cache[i_layer] for cache in past_caches], dim=2))
+    ret.seen_tokens = ret.key_cache[0].shape[2]
     return ret
 
 
@@ -79,15 +86,25 @@ class Nuggets:
 
         def safe_cat(name: str, dim: int = 1) -> Optional[Tensor]:
             items = [getattr(nug, name) for nug in nuggets]
-            if items[0] is None:
+            if any(item is None for item in items):
                 return None
             return torch.cat(items, dim=dim)
 
         return Nuggets(
-            encoding=enc, mask=safe_cat('mask'), scores=safe_cat('scores'),
+            encoding=enc, mask=safe_cat('mask'), scores=safe_cat('safe_scores'),
             index=safe_cat('index'), all_scores=safe_cat('all_scores'), position_ids=safe_cat('position_ids')
         )
 
+    @property
+    def safe_scores(self) -> Tensor:
+        # return scores if it exists, otherwise return zero tensors
+        if self.scores is not None:
+            return self.scores
+        if self.is2d:
+            float_dtype = self.encoding.key_cache[0].dtype
+        else:
+            float_dtype = self.encoding.dtype
+        return self.mask.new_zeros(self.mask.shape, dtype=float_dtype)
 
 @dataclass
 class NuggetInspect:
