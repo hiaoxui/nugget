@@ -59,7 +59,6 @@ class Nuggets:
     scores: Optional[Tensor] = None
     index: Optional[Tensor] = None
     all_scores: Optional[Tensor] = None
-    position_ids: Optional[Tensor] = None
 
     @property
     def indices(self) -> List[List[int]]:
@@ -92,7 +91,7 @@ class Nuggets:
 
         return Nuggets(
             encoding=enc, mask=safe_cat('mask'), scores=safe_cat('safe_scores'),
-            index=safe_cat('index'), all_scores=safe_cat('all_scores'), position_ids=safe_cat('position_ids')
+            index=safe_cat('index'), all_scores=safe_cat('all_scores'),
         )
 
     @property
@@ -105,6 +104,7 @@ class Nuggets:
         else:
             float_dtype = self.encoding.dtype
         return self.mask.new_zeros(self.mask.shape, dtype=float_dtype)
+
 
 @dataclass
 class NuggetInspect:

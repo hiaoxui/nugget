@@ -68,21 +68,18 @@ class NuggetScorer(torch.nn.Module):
         else:
             enc = None
         nugget_scores = scores.gather(1, indices)
-
-        nuggets = Nuggets(enc, nugget_mask, nugget_scores, indices, scores)
-
-        # `this_pid` is the position IDs of this batch of tokens
-        if position_ids is not None:
-            this_pid = position_ids[:, -seq_len:]
+        if position_ids is None:
+            nugget_index = indices
         else:
-            this_pid = torch.arange(seq_len, device=input_ids.device)[None, :].expand(bsz, -1)
-        nuggets.position_ids = this_pid.gather(1, indices)
+            nugget_index = position_ids[:, -seq_len:].gather(1, indices)
+
+        nuggets = Nuggets(enc, nugget_mask, nugget_scores, nugget_index, scores)
 
         if not use_cache:
             return nuggets
         else:
             pkv = truncate_pkv(transformer_out.past_key_values, seq_len)
-            return nuggets, Nuggets(pkv, attention_mask, position_ids=this_pid)
+            return nuggets, Nuggets(pkv, attention_mask)
 
     def score_context(self, nuggets: Nuggets):
         return self.feeder(nuggets.scores)

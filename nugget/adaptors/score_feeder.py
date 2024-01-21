@@ -8,8 +8,8 @@ class NuggetScoreFeeder:
         self.straight_through, self._enable = straight_through, enable
         self.scores: Optional[torch.Tensor] = None
 
-    def __call__(self, scores: torch.Tensor):
-        if self._enable:
+    def __call__(self, scores: Optional[torch.Tensor]):
+        if self._enable and scores is not None:
             if self.straight_through:
                 self.scores = scores - scores.detach()
             else:
