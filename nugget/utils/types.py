@@ -74,6 +74,7 @@ class Nuggets:
     @staticmethod
     def cat(nuggets: List["Nuggets"]) -> "Nuggets":
         # concatenate multiple nuggets into one
+        nuggets = [nug for nug in nuggets if nug is not None and nug.encoding is not None]
         if len(nuggets) == 0:
             return Nuggets(None, None)
         if len(nuggets) == 1:
@@ -104,6 +105,27 @@ class Nuggets:
         else:
             float_dtype = self.encoding.dtype
         return self.mask.new_zeros(self.mask.shape, dtype=float_dtype)
+
+    def valid(self) -> bool:
+        # check if shapes are compatible
+        bsz, n = self.mask.shape
+        if self.is2d:
+            encoding_shape = self.encoding.key_cache[0].shape
+            if encoding_shape[0] != bsz or encoding_shape[2] != n:
+                return False
+        else:
+            if self.encoding.shape[0] != bsz or self.encoding.shape[1] != n:
+                return False
+        if self.scores is not None:
+            if self.scores.shape[0] != bsz or self.scores.shape[1] != n:
+                return False
+        if self.index is not None:
+            if self.index.shape[0] != bsz or self.index.shape[1] != n:
+                return False
+        return True
+
+    def __len__(self) -> int:
+        return self.mask.shape[1]
 
 
 @dataclass
