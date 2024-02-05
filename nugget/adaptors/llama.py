@@ -283,7 +283,7 @@ def adapt_llama(
         attn_module.__class__ = NuggetLlamaAttention
         attn_module.nugget_score_feeder = feeder
     # A SHALLOW copy
-    nugget_feat = partial(llama.model, activate_layers=scorer_layer)
+    nugget_feat = partial(llama.model, active_layers=scorer_layer)
     # use NuggetLlamaModel
     llama.model.__class__ = NuggetLlamaModel
     llama.model._use_sdpa = False
