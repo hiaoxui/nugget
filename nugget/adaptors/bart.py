@@ -155,6 +155,7 @@ def adapt_bart(feeder: NuggetScoreFeeder, base_model, scorer_layer, residual_sta
         attn_module.nugget_score_feeder = feeder
     # for scorer feature feeder
     nugget_feat = deepcopy(base_model.model.encoder)
+    nugget_feat.requires_grad_(False)
     nugget_feat.layers = nugget_feat.layers[:scorer_layer]
 
     # the encoder is isolated from the BartForConditionalGeneration

@@ -1,7 +1,7 @@
 from typing import *
 import warnings
 import math
-from copy import copy
+from functools import partial
 
 import torch
 from torch import nn
@@ -29,6 +29,7 @@ class NuggetLlamaModel(LlamaModel):
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
+            active_layers: Optional[int] = None,  # only first N layers will be used
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -100,7 +101,7 @@ class NuggetLlamaModel(LlamaModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
-        for decoder_layer in self.layers:
+        for decoder_layer in self.layers[:active_layers or 99999]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -132,7 +133,8 @@ class NuggetLlamaModel(LlamaModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = self.norm(hidden_states)
+        if active_layers is not None:
+            hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -149,6 +151,7 @@ class NuggetLlamaModel(LlamaModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
+
 
 class NuggetLlamaAttention(LlamaAttention):
     # Adapted from Huggingface/Transformers v4.35.2
@@ -280,8 +283,7 @@ def adapt_llama(
         attn_module.__class__ = NuggetLlamaAttention
         attn_module.nugget_score_feeder = feeder
     # A SHALLOW copy
-    nugget_feat = copy(llama.base_model)
-    nugget_feat.layers = nugget_feat.layers[:scorer_layer]
+    nugget_feat = partial(llama.model, activate_layers=scorer_layer)
     # use NuggetLlamaModel
     llama.model.__class__ = NuggetLlamaModel
     llama.model._use_sdpa = False

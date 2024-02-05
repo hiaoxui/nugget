@@ -15,7 +15,7 @@ class NuggetScorer(torch.nn.Module):
         super().__init__()
         self.base_transformer, self.feeder = base_transformer, feeder
         self.ratio = ratio
-        self.base_transformer.requires_grad_(False)
+        # self.base_transformer.requires_grad_(False)
         self.non_linear = torch.nn.Sequential(
             torch.nn.Linear(d_model, d_model, True),
             torch.nn.ReLU(True),
