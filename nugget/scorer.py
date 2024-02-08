@@ -73,7 +73,7 @@ class NuggetScorer(torch.nn.Module):
         else:
             nugget_index = position_ids[:, -seq_len:].gather(1, indices)
 
-        nuggets = Nuggets(enc, nugget_mask, nugget_scores, nugget_index, scores)
+        nuggets = Nuggets(enc, nugget_mask, nugget_scores, nugget_index, scores, index_in_batch=indices)
 
         if not use_cache:
             return nuggets

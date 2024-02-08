@@ -46,19 +46,22 @@ class Nuggets:
     """
     `encoding`, shaped as (bsz, #nugget, dim), is the nugget encodings, which is masked by  `mask`, shaped
     as (bsz, #nugget). Note that `mask` is of `bool` type instead of int64.
-    `index`, shaped as (bsz, #nugget), is the index of each nugget.
-    It is also masked by `mask`.
+    `index`, shaped as (bsz, #nugget), is the index of each nugget. It is also masked by `mask`.
+    `index_in_batch`, shaped as (bsz, #nugget), is the index of nugget in **this batch**.
+    Please note that index is supposed to be the indices of nuggets in the whole sequence, and will
+    be derived from `position_ids` if provided. `index_in_batch` is the nugget indices in this batch,
+    ignoring context.
     Below are some variables that might not be needed as output but for internal use:
     `scores`, shaped as (bsz, #nugget), is the logits of nuggets. Masked by `mask`.
     `all_scores`, shaped as (bsz, #token), is the logits of all tokens. It should be masked with a mask that
     is not present in this tuple.
-    `position_ids`, shaped as (bsz, #tokens), the position_ids of the associated tokens.
     """
     encoding: Optional[Union[Tensor, DynamicCache]]
     mask: Optional[Tensor]
     scores: Optional[Tensor] = None
     index: Optional[Tensor] = None
     all_scores: Optional[Tensor] = None
+    index_in_batch: Optional[Tensor] = None
 
     @property
     def indices(self) -> List[List[int]]:
