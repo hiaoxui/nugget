@@ -1,44 +1,50 @@
 from typing import *
 from dataclasses import dataclass
 
-from transformers import DynamicCache
 import torch
 from torch import Tensor
 
 
-def truncate_pkv(past_kv: DynamicCache, k: int) -> DynamicCache:
-    ret = DynamicCache()
-    ret.key_cache = [layer[:, :, -k:] for layer in past_kv.key_cache]
-    ret.value_cache = [layer[:, :, -k:] for layer in past_kv.value_cache]
-    ret.seen_tokens = k
-    return ret
+CacheType = Tuple[Tuple[Tensor, Tensor], ...]
 
 
-def gather_cache(cache: DynamicCache, index: Tensor):
-    bsz, n_head, n_token, head_dim = cache.key_cache[0].shape
-    n_layer = len(cache.key_cache)
-    ret = DynamicCache()
+def truncate_pkv(past_kv: CacheType, k: int) -> CacheType:
+    layers = []
+    for lay in past_kv:
+        layer = []
+        for j in range(2):
+            layer.append(lay[j][:, :, -k:])
+        layers.append(tuple(layer))
+    return tuple(layers)
+
+
+def gather_cache(cache: tuple, index: Tensor):
+    bsz, n_head, n_token, head_dim = cache[0][0].shape
+    n_layer = len(cache)
+    ret = list()
     # index shape (bsz, nugget) -> (bsz, head, nugget, head_dim)
     index_exp = index[:, None, :, None].expand(bsz, n_head, -1, head_dim)
     for i_layer in range(n_layer):
         # kv shape (in LLaMA) (bsz, heads, token, head_dim)
-        ret.key_cache.append(cache.key_cache[i_layer].gather(2, index_exp))
-        ret.value_cache.append(cache.value_cache[i_layer].gather(2, index_exp))
-    ret.seen_tokens = n_token
-    return ret
+        lay = []
+        for j in range(2):
+            lay.append(cache[i_layer][j].gather(2, index_exp))
+        ret.append(tuple(lay))
+    return tuple(ret)
 
 
-def cat_cache(past_caches: List[DynamicCache]) -> DynamicCache:
+def cat_cache(past_caches: List[Tuple]) -> Optional[CacheType]:
     # concatenate key values into one
-    past_caches = [cache for cache in past_caches if cache is not None and cache.seen_tokens > 0]
+    past_caches = [cache for cache in past_caches if cache is not None and cache[0][0].shape[2] > 0]
     if len(past_caches) == 0:
-        return DynamicCache()
-    ret = DynamicCache()
+        return
+    ret = list()
     for i_layer in range(len(past_caches[0])):
-        ret.key_cache.append(torch.cat([cache.key_cache[i_layer] for cache in past_caches], dim=2))
-        ret.value_cache.append(torch.cat([cache.value_cache[i_layer] for cache in past_caches], dim=2))
-    ret.seen_tokens = ret.key_cache[0].shape[2]
-    return ret
+        lay = list()
+        for j in range(2):
+            lay.append(torch.cat([cache[i_layer][j] for cache in past_caches], dim=2))
+        ret.append(tuple(lay))
+    return tuple(ret)
 
 
 @dataclass
@@ -56,7 +62,7 @@ class Nuggets:
     `all_scores`, shaped as (bsz, #token), is the logits of all tokens. It should be masked with a mask that
     is not present in this tuple.
     """
-    encoding: Optional[Union[Tensor, DynamicCache]]
+    encoding: Optional[Union[Tensor, Tuple[Tuple[Tensor, Tensor], ...]]]
     mask: Optional[Tensor]
     scores: Optional[Tensor] = None
     index: Optional[Tensor] = None
@@ -72,7 +78,7 @@ class Nuggets:
 
     @property
     def is2d(self) -> bool:
-        return isinstance(self.encoding, DynamicCache)
+        return isinstance(self.encoding, tuple)
 
     @staticmethod
     def cat(nuggets: List["Nuggets"]) -> "Nuggets":
@@ -104,7 +110,7 @@ class Nuggets:
         if self.scores is not None:
             return self.scores
         if self.is2d:
-            float_dtype = self.encoding.key_cache[0].dtype
+            float_dtype = self.encoding[0][0].dtype
         else:
             float_dtype = self.encoding.dtype
         return self.mask.new_zeros(self.mask.shape, dtype=float_dtype)
@@ -113,7 +119,7 @@ class Nuggets:
         # check if shapes are compatible
         bsz, n = self.mask.shape
         if self.is2d:
-            encoding_shape = self.encoding.key_cache[0].shape
+            encoding_shape = self.encoding[0][0].shape
             if encoding_shape[0] != bsz or encoding_shape[2] != n:
                 return False
         else:
