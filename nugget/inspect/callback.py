@@ -4,15 +4,18 @@ import json
 import shutil
 import multiprocessing
 
-from lightning.pytorch.callbacks import Callback
-from lightning.pytorch import Trainer, LightningModule
-from lightning.pytorch.utilities.types import STEP_OUTPUT
-import lightning.pytorch as pl
+try:
+    from lightning.pytorch.callbacks import Callback
+    from lightning.pytorch import Trainer, LightningModule
+    from lightning.pytorch.utilities.types import STEP_OUTPUT
+    import lightning.pytorch as pl
+    from transformers import AutoTokenizer
+except ImportError:
+    pass
 
 from nugget.utils.types import Nuggets, NuggetInspect
 from nugget.inspect.highlight import gen_highlight
 from nugget.inspect.composition_plot import composition_plot
-from dlutils.tokenizer_wihtout_warning import load_tokenizer
 
 
 def collection_and_plot(inspect_path: str, pretrained: str):
@@ -31,7 +34,7 @@ def collection_and_plot(inspect_path: str, pretrained: str):
     nuggets = [NuggetInspect(nug['tokens'], nug['index'], nug['scores']) for nug in nuggets]
 
     # Convert to tokens
-    tok = load_tokenizer(pretrained, use_fast=False)
+    tok = AutoTokenizer.from_pretrained(pretrained, use_fast=False, legacy=False)
     for nug in nuggets:
         nug.to_tokens(tok)
 
@@ -71,11 +74,11 @@ class InspectCallback(Callback):
             return
         if self.period <= 0 or (self.current_idx % self.period != 1 and self.period != 1):
             return
-        # assume the first output is nugget
-        nuggets: Nuggets = outputs[0]
-        for i in range(nuggets.encoding.shape[0]):
+        # Assume the outputs follow this interface
+        input_ids, attention_mask, nuggets = outputs
+        for i in range(nuggets.shape[0]):
             self.val_outputs.append(NuggetInspect(
-                batch['input_ids'][i][batch['attention_mask'][i]].tolist(),
+                input_ids[i][attention_mask[i]].tolist(),
                 nuggets.index[i][nuggets.mask[i]].tolist(),
                 nuggets.scores[i][nuggets.mask[i]].tolist(),
             ))

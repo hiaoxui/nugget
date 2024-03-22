@@ -1,8 +1,11 @@
 from typing import *
 from collections import defaultdict
 
-from matplotlib import pyplot as plt
-import numpy as np
+try:
+    from matplotlib import pyplot as plt
+    import numpy as np
+except ImportError:
+    pass
 
 from nugget.utils.types import NuggetInspect
 
