@@ -70,6 +70,10 @@ class Nuggets:
     index_in_batch: Optional[Tensor] = None
 
     @property
+    def shape(self) -> torch.Size:
+        return self.mask.shape
+
+    @property
     def indices(self) -> List[List[int]]:
         selected_indices = list()
         for ma, ti in zip(self.mask, self.index):

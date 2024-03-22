@@ -178,6 +178,21 @@ class NuggetLlamaModel(LlamaModel):
 class NuggetLlamaAttention(LlamaAttention):
     nugget_score_feeder: Optional[NuggetScoreFeeder] = None
 
+    def feed_nugget(self, attn_weights):
+        if self.nugget_score_feeder is not None and self.nugget_score_feeder.scores is not None:
+            # shape of attn_weights: (bsz, n_head, q, kv)
+            bsz, _, _, kv_seq_len = attn_weights.shape
+            # shape of scores: (bsz, nugget)
+            scores = self.nugget_score_feeder.scores
+            if scores.shape[1] < kv_seq_len:
+                # Scores are associated with past_key_values, but kv_length is the sum of
+                # len(past_key_values) and current segment length, so we need to pad on the right
+                scores = torch.cat(
+                    [scores, scores.new_zeros((bsz, kv_seq_len-scores.shape[1]))], dim=1
+                )[:, None, None, :]
+            attn_weights = attn_weights + scores
+        return attn_weights
+
     def forward(
             self,
             hidden_states: torch.Tensor,
@@ -232,15 +247,7 @@ class NuggetLlamaAttention(LlamaAttention):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         # Start of Nugget
-        kv_seq_len = key_states.shape[-2]
-        if self.nugget_score_feeder is not None and self.nugget_score_feeder.scores is not None:
-            # shape of attn_weights: (bsz, n_head, q, kv)
-            # shape of scores: (bsz, nugget)
-            scores = self.nugget_score_feeder.scores
-            expanded_scores = torch.cat(
-                [scores, scores.new_zeros((bsz, kv_seq_len-scores.shape[1]))], dim=1
-            )[:, None, None, :]
-            attn_weights = attn_weights + expanded_scores
+        attn_weights = self.feed_nugget(attn_weights)
         # End of Nugget
 
         if attention_mask is not None:  # no matter the length, we just slice it
