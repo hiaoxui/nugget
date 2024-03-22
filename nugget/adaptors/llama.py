@@ -1,4 +1,4 @@
-# supposed to be compatible with huggingface/transformers v4.38.1
+# supposed to be compatible with huggingface/transformers v4.39.0
 from typing import *
 import warnings
 import math
@@ -56,9 +56,11 @@ class NuggetLlamaModel(LlamaModel):
         if use_cache:  # kept for BC (cache positions)
             if not isinstance(past_key_values, StaticCache):
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_seen_tokens = past_key_values.get_seq_length()
+                past_seen_tokens = past_key_values.get_seq_length()
 
         if cache_position is None:
+            if isinstance(past_key_values, StaticCache):
+                raise ValueError("cache_position is a required argument when using StaticCache.")
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
@@ -66,7 +68,12 @@ class NuggetLlamaModel(LlamaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
+        # Start of Nugget
+        if attention_mask.dim() != 4:
+            causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+        else:
+            causal_mask = attention_mask
+        # End of Nugget
 
         # embed positions
         hidden_states = inputs_embeds
@@ -110,7 +117,7 @@ class NuggetLlamaModel(LlamaModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        if active_layers is not None:
+        if active_layers is None:
             hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
@@ -130,49 +137,6 @@ class NuggetLlamaModel(LlamaModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
-    def _update_causal_mask(self, attention_mask, input_tensor):
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
-                return attention_mask
-            return None
-
-        batch_size, seq_length = input_tensor.shape[:2]
-        dtype = input_tensor.dtype
-        device = input_tensor.device
-
-        # support going beyond cached `max_position_embedding`
-        if seq_length > self.causal_mask.shape[-1]:
-            causal_mask = torch.full((2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]), fill_value=1)
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
-
-        if hasattr(self, "causal_mask"):  # we use the current dtype to avoid any overflows
-            causal_mask = (
-                    self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
-            )
-        else:
-            mask = torch.full(
-                (self.config.max_position_embeddings, self.config.max_position_embeddings),
-                fill_value=torch.finfo(dtype).min,
-            )
-            causal_mask = torch.triu(mask, diagonal=1)
-
-        causal_mask = causal_mask.to(dtype=dtype, device=device)
-        if attention_mask is not None and attention_mask.dim() == 2:
-            mask_length = attention_mask.shape[-1]
-            padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-            causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(
-                padding_mask, torch.finfo(dtype).min
-            )
-
-        if self.config._attn_implementation == "sdpa":
-            is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
-            if not is_tracing and attention_mask is not None and torch.any(attention_mask != 1):
-                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(
-                    dtype
-                )
-
-        return causal_mask
 
 
 class NuggetLlamaAttention(LlamaAttention):
@@ -237,7 +201,7 @@ class NuggetLlamaAttention(LlamaAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
-            # sin and cos are specific to RoPE models; position_ids needed for the static cache
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -251,8 +215,7 @@ class NuggetLlamaAttention(LlamaAttention):
         # End of Nugget
 
         if attention_mask is not None:  # no matter the length, we just slice it
-            if cache_position is not None:
-                causal_mask = attention_mask[:, :, cache_position, : key_states.shape[-2]]
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -285,14 +248,26 @@ class NuggetLlamaAttention(LlamaAttention):
 
 class NuggetLlamaForCausalLM(LlamaForCausalLM):
     def prepare_inputs_for_generation(
-            self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+            self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, cache_position=None, **kwargs
     ):
+        # With static cache, the `past_key_values` is None
+        # TODO joao: standardize interface for the different Cache classes and remove of this if
+        has_static_cache = False
+        if past_key_values is None:
+            past_key_values = getattr(self.model.layers[0].self_attn, "past_key_value", None)
+            has_static_cache = past_key_values is not None
+
         past_length = 0
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
+                past_length = cache_position[0] if cache_position is not None else past_key_values.get_seq_length()
+                max_cache_length = (
+                    torch.tensor(past_key_values.get_max_length(), device=input_ids.device)
+                    if past_key_values.get_max_length() is not None
+                    else None
+                )
+                cache_length = past_length if max_cache_length is None else torch.min(max_cache_length, past_length)
+            # TODO joao: remove this `else` after `generate` prioritizes `Cache` objects
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
                 max_cache_length = None
@@ -330,25 +305,23 @@ class NuggetLlamaForCausalLM(LlamaForCausalLM):
             position_ids = position_ids + attention_mask.sum(-1)
         # End of Nugget
 
-        if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value", None):
-            # generation with static cache
-            past_length = past_key_value.get_seq_length()
-            input_ids = input_ids[:, past_length:]
-            position_ids = position_ids[:, past_length:]
-
-        # TODO @gante we should only keep a `cache_position` in generate, and do +=1.
-        # same goes for position ids. Could also help with continued generation.
-        cache_position = kwargs.get("cache_position", None)
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_length, past_length + position_ids.shape[-1], device=position_ids.device
-            )
-
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
+            # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
+            # TODO: use `next_tokens` directly instead.
+            model_inputs = {"input_ids": input_ids.contiguous()}
+
+        input_length = position_ids.shape[-1] if position_ids is not None else input_ids.shape[-1]
+        if cache_position is None:
+            cache_position = torch.arange(past_length, past_length + input_length, device=input_ids.device)
+        else:
+            cache_position = cache_position[-input_length:]
+
+        if has_static_cache:
+            past_key_values = None
 
         model_inputs.update(
             {
