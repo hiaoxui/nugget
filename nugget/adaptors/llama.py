@@ -117,8 +117,7 @@ class NuggetLlamaModel(LlamaModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        if active_layers is None:
-            hidden_states = self.norm(hidden_states)
+        hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
