@@ -69,3 +69,27 @@ with scorer.score_context(nuggets):
 
 decoder_out.loss.backward()
 ```
+
+# Citation
+
+Please cite this paper if Nugget is helpful to your research:
+
+```bibtex
+@InProceedings{pmlr-v202-qin23a,
+  title = 	 {Nugget: Neural Agglomerative Embeddings of Text},
+  author =       {Qin, Guanghui and Van Durme, Benjamin},
+  booktitle = 	 {Proceedings of the 40th International Conference on Machine Learning},
+  pages = 	 {28337--28350},
+  year = 	 {2023},
+  editor = 	 {Krause, Andreas and Brunskill, Emma and Cho, Kyunghyun and Engelhardt, Barbara and Sabato, Sivan and Scarlett, Jonathan},
+  volume = 	 {202},
+  series = 	 {Proceedings of Machine Learning Research},
+  month = 	 {23--29 Jul},
+  publisher =    {PMLR},
+  pdf = 	 {https://proceedings.mlr.press/v202/qin23a/qin23a.pdf},
+  url = 	 {https://proceedings.mlr.press/v202/qin23a.html},
+  abstract = 	 {Embedding text sequences is a widespread requirement in modern language understanding. Existing approaches focus largely on constant-size representations. This is problematic, as the amount of information contained in text often varies with the length of the input. We propose a solution called Nugget, which encodes language into a representation based on a dynamically selected subset of input tokens. These nuggets are learned through tasks like autoencoding and machine translation, and intuitively segment language into meaningful units. We demonstrate Nugget outperforms related approaches in tasks involving semantic comparison. Finally, we illustrate these compact units allow for expanding the contextual window of a language model (LM), suggesting new future LMs that can condition on significantly larger amounts of content.}
+}
+```
+
+Other related papers that uses the idea of Nugget are [Dodo](https://gqin.me/files/24papers/dodo.pdf) and [STAR](https://doi.org/10.48550/arXiv.2402.01172). 
