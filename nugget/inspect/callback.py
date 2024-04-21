@@ -84,10 +84,12 @@ class InspectCallback(Callback):
             ))
 
     def on_validation_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        if self.val_outputs:
-            os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
-            with open(self.save_path, 'w') as fp:
-                fp.write('\n'.join(map(json.dumps, map(vars, self.val_outputs))))
+        if not self.val_outputs:
+            return
+
+        os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
+        with open(self.save_path, 'w') as fp:
+            fp.write('\n'.join(map(json.dumps, map(vars, self.val_outputs))))
 
         inspect_path = os.path.dirname(os.path.dirname(self.save_path))
         if trainer.is_global_zero and os.path.exists(inspect_path):
