@@ -33,10 +33,16 @@ class NuggetScorer(torch.nn.Module):
         # `position_ids`: The position IDs of the associated tokens. Its length can be longer than
         # `input_ids` as base_transformer can take past key values.
         bsz, seq_len = input_ids.shape
-        transformer_out = self.base_transformer(
-            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True,
-            position_ids=position_ids, use_cache=use_cache, **kwargs,
-        )
+
+        transformer_kwargs = {
+            'output_hidden_states': True, 'input_ids': input_ids, 'attention_mask': attention_mask,
+            'use_cache': use_cache,
+        }
+        transformer_kwargs.update(kwargs)
+        if position_ids:
+            transformer_kwargs['position_ids'] = position_ids
+        transformer_out = self.base_transformer(**transformer_kwargs)
+
         # attention_mask could be longer than sequence length if past_kv are passed.
         attention_mask = attention_mask[:, -seq_len:]
         scores = self.non_linear(transformer_out.hidden_states[-1]).squeeze(2)
