@@ -162,7 +162,7 @@ def adapt_t5(
     # for scorer feature feeder
     nugget_feat = deepcopy(base_model.encoder)
     nugget_feat.requires_grad_(False)
-    nugget_feat.layers = nugget_feat.block[:scorer_layer]
+    nugget_feat.block = nugget_feat.block[:scorer_layer]
 
     # the encoder is isolated from the BartForConditionalGeneration
     encoder = base_model.encoder
