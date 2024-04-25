@@ -70,6 +70,40 @@ with scorer.score_context(nuggets):
 decoder_out.loss.backward()
 ```
 
+# Load from checkpoint
+
+With T5/Bart as an example.
+
+```python3
+from nugget import nuggify
+from torch
+from transformers import AutoModelForSeq2SeqLM
+
+# load from ckpt and construct the Nugget modules
+ckpt = torch.load('/path/to/checkpoint')
+model_name, nugget_kwargs = ckpt['model_name'], ckpt['nugget_kwargs']
+base_model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+scorer, encoder, decoder, nugget_kwargs = nuggify(base_model, **nugget_kwargs)
+scorer.load_state_dict(ckpt['weight'])
+# Optionally fix the scorer
+scorer.requires_grad_(False)
+
+# example usage
+tok = AutoTokenizer.from_pretrained(model_name)
+text = 'Natural language processing (NLP) is an interdisciplinary subfield of computer science and information retrieval. It is primarily concerned with giving computers the ability to support and manipulate human language. It involves processing natural language datasets, such as text corpora or speech corpora, using either rule-based or probabilistic (i.e. statistical and, most recently, neural network-based) machine learning approaches. The goal is a computer capable of "understanding" the contents of documents, including the contextual nuances of the language within them. To this end, natural language processing often borrows ideas from theoretical linguistics. The technology can then accurately extract information and insights contained in the documents as well as categorize and organize the documents themselves.'
+inputs = tok(text, return_tensors='pt')
+# T5/Bart encoder outputs
+encodings = encoder(**inputs)
+# subselection happens. The output is Nugget type.
+# check the comments of [Nuggets](nugget/utils/types.py) for more information about Nugget
+nuggets = scorer(**inputs, hidden_states=encodings.last_hidden_state)
+
+# encoding is the subselected encoding. mask is necessary for a batch of sequences.
+print(nuggets.encoding.shape)
+print(nuggets.mask.shape)
+
+```
+
 # Citation
 
 Please cite this paper if Nugget is helpful to your research:
