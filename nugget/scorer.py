@@ -1,4 +1,4 @@
-from typing import *
+from typing import Union, Tuple, Optional
 
 from transformers import DynamicCache
 import torch
@@ -39,7 +39,7 @@ class NuggetScorer(torch.nn.Module):
             'use_cache': use_cache,
         }
         transformer_kwargs.update(kwargs)
-        if position_ids:
+        if position_ids is not None:
             transformer_kwargs['position_ids'] = position_ids
         transformer_out = self.base_transformer(**transformer_kwargs)
 

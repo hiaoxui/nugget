@@ -69,7 +69,7 @@ class NuggetLlamaModel(LlamaModel):
 
         # Start of Nugget
         if attention_mask.dim() != 4:
-            causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position)
+            causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_seen_tokens)
         else:
             causal_mask = attention_mask
         # End of Nugget
