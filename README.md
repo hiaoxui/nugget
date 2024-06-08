@@ -113,7 +113,7 @@ It is a transformer encoder (first k-layers) stacked with an FFN layer.
 To load a scorer alone, you need the pretrained transformer checkpint and the scorer checkpoint.
 Say we have `meta-llama/Llama-2-7b-chat-hf` and `/path/to/scorer.pkl`, then we
 
-```bash
+```python3
 from nugget import nuggify
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
