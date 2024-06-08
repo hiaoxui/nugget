@@ -76,8 +76,8 @@ With T5/Bart as an example.
 
 ```python3
 from nugget import nuggify
-from torch
-from transformers import AutoModelForSeq2SeqLM
+import torch
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 # load from ckpt and construct the Nugget modules
 ckpt = torch.load('/path/to/checkpoint')
@@ -103,6 +103,39 @@ print(nuggets.encoding.shape)
 print(nuggets.mask.shape)
 
 ```
+
+
+# Instruction on stand-alone scorer loading for decoder-only LMs
+
+A nugget scorer scores each token and generate a scalar value to indicate its priority to be selected as nuggets.
+It is a transformer encoder (first k-layers) stacked with an FFN layer.
+
+To load a scorer alone, you need the pretrained transformer checkpint and the scorer checkpoint.
+Say we have `meta-llama/Llama-2-7b-chat-hf` and `/path/to/scorer.pkl`, then we
+
+```bash
+from nugget import nuggify
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+pretrained = 'meta-llama/Llama-2-7b-chat-hf'
+model = AutoModelForCausalLM.from_pretrained(pretrained)
+tok = AutoTokenizer.from_pretrained(pretrained)
+
+# ratio is nuggets/tokens
+scorer, _, _, _ = nuggify(model, ratio=0.1)
+scorer.load_scorer('/path/to/scorer')
+
+text = 'Natural language processing (NLP) is an interdisciplinary subfield of computer science and information retrieval. It is primarily concerned with giving computers the ability to support and manipulate human language. It involves processing natural language datasets, such as text corpora or speech corpora, using either rule-based or probabilistic (i.e. statistical and, most recently, neural network-based) machine learning approaches. The goal is a computer capable of "understanding" the contents of documents, including the contextual nuances of the language within them. To this end, natural language processing often borrows ideas from theoretical linguistics. The technology can then accurately extract information and insights contained in the documents as well as categorize and organize the documents themselves. '
+inputs = tok(text, return_tensors='pt')
+nuggets = scorer(**inputs)
+
+# scorers selects int(ratio*seq_len) tokens as nuggets. Their indices are
+print(nuggets.index)
+# if you want to use a different/flexible ratio, you can get the raw scores
+print(nuggets.all_scores)
+```
+
+Please note the current version of Nugget codebase is tied to huggingface/transformers v4.41.x.
 
 # Citation
 

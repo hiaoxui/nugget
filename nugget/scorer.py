@@ -27,7 +27,7 @@ class NuggetScorer(torch.nn.Module):
 
     def forward(
             self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
-            hidden_states: Union[torch.Tensor, DynamicCache, None],
+            hidden_states: Union[torch.Tensor, DynamicCache, None] = None,
             position_ids: Optional[torch.Tensor] = None, use_cache: bool = False, **kwargs
     ) -> Union[Nuggets, Tuple[Nuggets, Nuggets]]:
         # `position_ids`: The position IDs of the associated tokens. Its length can be longer than
@@ -89,3 +89,6 @@ class NuggetScorer(torch.nn.Module):
 
     def score_context(self, nuggets: Nuggets):
         return self.feeder(nuggets.scores)
+    
+    def load_scorer(self, path):
+        self.non_linear.load_state_dict(torch.load(path, map_location='cpu'))

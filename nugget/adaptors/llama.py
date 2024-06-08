@@ -51,25 +51,24 @@ class NuggetLlamaModel(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        past_seen_tokens = 0
-        if use_cache:  # kept for BC (cache positions)
-            if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-                past_seen_tokens = past_key_values.get_seq_length()
+        return_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+            return_legacy_cache = True
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         if cache_position is None:
-            if isinstance(past_key_values, StaticCache):
-                raise ValueError("cache_position is a required argument when using StaticCache.")
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
-
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         # Start of Nugget
         if attention_mask.dim() != 4:
-            causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_seen_tokens)
+            causal_mask = self._update_causal_mask(
+                attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            )
         else:
             causal_mask = attention_mask
         # End of Nugget
