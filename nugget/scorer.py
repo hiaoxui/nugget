@@ -90,5 +90,14 @@ class NuggetScorer(torch.nn.Module):
     def score_context(self, nuggets: Nuggets):
         return self.feeder(nuggets.scores)
     
-    def load_scorer(self, path):
-        self.non_linear.load_state_dict(torch.load(path, map_location='cpu'))
+    def load_scorer(self, path_or_state: str | dict):
+        if isinstance(path_or_state, dict):
+            states = path_or_state
+        else:
+            states = torch.load(path_or_state, map_location=torch.device('cpu'))
+        if 'non_linear' in states:
+            self.non_linear.load_state_dict(states['non_linear'])
+            if 'value_ffn' in states:
+                self.value_ffn.load_state_dict(states['value_ffn'])
+        else:
+            self.non_linear.load_state_dict(states)

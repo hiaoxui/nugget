@@ -70,9 +70,7 @@ with scorer.score_context(nuggets):
 decoder_out.loss.backward()
 ```
 
-# Load from checkpoint
-
-With T5/Bart as an example.
+# Instruction on stand-alone scorer loading for encoder-decoder LMs
 
 ```python3
 from nugget import nuggify
@@ -80,11 +78,11 @@ import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 # load from ckpt and construct the Nugget modules
-ckpt = torch.load('/path/to/checkpoint')
-model_name, nugget_kwargs = ckpt['model_name'], ckpt['nugget_kwargs']
+ckpt = torch.load('/path/to/scorer.ckpt')
+model_name, nugget_kwargs = ckpt['model_name'], ckpt['kwargs']
 base_model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
 scorer, encoder, decoder, nugget_kwargs = nuggify(base_model, **nugget_kwargs)
-scorer.load_state_dict(ckpt['weight'])
+scorer.load_scorer(ckpt['scorer_states'])
 # Optionally fix the scorer
 scorer.requires_grad_(False)
 
@@ -98,9 +96,13 @@ encodings = encoder(**inputs)
 # check the comments of [Nuggets](nugget/utils/types.py) for more information about Nugget
 nuggets = scorer(**inputs, hidden_states=encodings.last_hidden_state)
 
-# encoding is the subselected encoding. mask is necessary for a batch of sequences.
+# encoding is the last-layer embeddings of the selected tokens.
+# mask is necessary for a batch of sequences.
 print(nuggets.encoding.shape)
 print(nuggets.mask.shape)
+# `.index` is the indices of the selected tokens.
+selected = tok.convert_ids_to_tokens(inputs['input_ids'].gather(1, nuggets.index)[0].tolist())
+print(selected)
 
 ```
 
