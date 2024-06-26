@@ -90,20 +90,21 @@ scorer.requires_grad_(False)
 tok = AutoTokenizer.from_pretrained(model_name)
 text = 'Natural language processing (NLP) is an interdisciplinary subfield of computer science and information retrieval. It is primarily concerned with giving computers the ability to support and manipulate human language. It involves processing natural language datasets, such as text corpora or speech corpora, using either rule-based or probabilistic (i.e. statistical and, most recently, neural network-based) machine learning approaches. The goal is a computer capable of "understanding" the contents of documents, including the contextual nuances of the language within them. To this end, natural language processing often borrows ideas from theoretical linguistics. The technology can then accurately extract information and insights contained in the documents as well as categorize and organize the documents themselves.'
 inputs = tok(text, return_tensors='pt')
-# T5/Bart encoder outputs
-encodings = encoder(**inputs)
-# subselection happens. The output is Nugget type.
+# subselection happens here. The output is Nugget type.
 # check the comments of [Nuggets](nugget/utils/types.py) for more information about Nugget
-nuggets = scorer(**inputs, hidden_states=encodings.last_hidden_state)
-
-# encoding is the last-layer embeddings of the selected tokens.
-# mask is necessary for a batch of sequences.
-print(nuggets.encoding.shape)
-print(nuggets.mask.shape)
+# note this will only select tokens but will not generate encodings
+nuggets = scorer(**inputs)
 # `.index` is the indices of the selected tokens.
 selected = tok.convert_ids_to_tokens(inputs['input_ids'].gather(1, nuggets.index)[0].tolist())
 print(selected)
 
+# alternatively, if you already have T5 encodings, you can pass encoding to the scorer.
+encodings = encoder(**inputs)
+nuggets = scorer(**inputs, hidden_states=encodings.last_hidden_state)
+# encoding is the last-layer embeddings of the selected tokens.
+print(nuggets.encoding.shape)
+# mask is necessary for a batch of sequences.
+print(nuggets.mask.shape)
 ```
 
 
