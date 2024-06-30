@@ -4,7 +4,7 @@ from transformers import DynamicCache
 import torch
 
 from .adaptors.score_feeder import NuggetScoreFeeder
-from .utils.types import Nuggets, gather_cache, truncate_pkv
+from .utils.types import Nuggets, gather_cache_tuple, gather_cache_dynamic_cache, truncate_pkv
 
 
 class NuggetScorer(torch.nn.Module):
@@ -68,11 +68,11 @@ class NuggetScorer(torch.nn.Module):
             enc = hidden_states.gather(1, indices[:, :, None].expand(-1, -1, hidden_states.shape[2]))
             if self.value_ffn is not None:
                 enc = self.value_ffn(enc)
-        elif isinstance(hidden_states, DynamicCache):
+        elif isinstance(hidden_states, tuple):
             # is decoder-only models
-            enc = gather_cache(hidden_states, indices)
-        else:
-            enc = None
+            enc = gather_cache_tuple(hidden_states, indices)
+        elif isinstance(hidden_states, DynamicCache):
+            enc = gather_cache_dynamic_cache(hidden_states, indices)
         nugget_scores = scores.gather(1, indices)
         if position_ids is None:
             nugget_index = indices

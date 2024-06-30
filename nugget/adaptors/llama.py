@@ -1,7 +1,7 @@
-# supposed to be compatible with huggingface/transformers v4.39.1
+# supposed to be compatible with huggingface/transformers v4.42.3
 from typing import *
 import math
-from functools import partial
+from copy import deepcopy
 
 import torch
 from torch import nn
@@ -55,6 +55,10 @@ class NuggetLlamaModel(LlamaModel):
         if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            logger.warning_once(
+                "We detected that you are passing `past_key_values` as a tuple and this is deprecated and will be removed in v4.43. "
+                "Please use an appropriate `Cache` class (https://huggingface.co/docs/transformers/v4.41.3/en/internal/generation_utils#transformers.Cache)"
+            )
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -121,11 +125,10 @@ class NuggetLlamaModel(LlamaModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = None
-        if use_cache:
-            next_cache = (
-                next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
-            )
+        next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = next_cache.to_legacy_cache()
+
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -193,7 +196,6 @@ class NuggetLlamaAttention(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        past_key_value = getattr(self, "past_key_value", past_key_value)
         cos, sin = self.rotary_emb(value_states, position_ids)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -228,7 +230,7 @@ class NuggetLlamaAttention(LlamaAttention):
 
         attn_output = attn_output.transpose(1, 2).contiguous()
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.reshape(bsz, q_len, -1)
 
         if self.config.pretraining_tp > 1:
             attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
@@ -332,20 +334,31 @@ class NuggetLlamaForCausalLM(LlamaForCausalLM):
         return model_inputs
 
 
+def identity(x):
+    return x
+
+
 def adapt_llama(
         feeder: NuggetScoreFeeder, llama: LlamaForCausalLM,
         scorer_layer, residual_start, residual_end
 ):
-    # for scorer feature feeder
+    # cast
     for i_layer in range(residual_start, residual_end):
         attn_module = llama.model.layers[i_layer].self_attn
         attn_module.__class__ = NuggetLlamaAttention
         attn_module.nugget_score_feeder = feeder
-    # A SHALLOW copy
-    nugget_feat = partial(llama.model, active_layers=scorer_layer)
-    # use NuggetLlamaModel
     llama.model.__class__ = NuggetLlamaModel
-    llama.model._use_sdpa = False
     llama.__class__ = NuggetLlamaForCausalLM
-    # encoder is the same as decoder
+
+    # A deep copy
+    # deprive the layers to avoid massive memory usage
+    layers = llama.model.layers
+    llama.model.layers = None
+    nugget_feat = deepcopy(llama.model)
+    llama.model.layers = layers
+    nugget_feat.layers = deepcopy(layers[:scorer_layer])
+    nugget_feat.norm = nn.Identity()
+
+    # llama.model._use_sdpa = False
+
     return feeder, nugget_feat, None, llama

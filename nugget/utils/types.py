@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 import torch
 from torch import Tensor
+from transformers import DynamicCache
 
 
 CacheType = Tuple[Tuple[Tensor, Tensor], ...]
@@ -18,7 +19,21 @@ def truncate_pkv(past_kv: CacheType, k: int) -> CacheType:
     return tuple(layers)
 
 
-def gather_cache(cache: tuple, index: Tensor):
+def gather_cache_dynamic_cache(cache: DynamicCache, index: Tensor):
+    bsz, n_head, n_token, head_dim = cache.key_cache[0].shape
+    # index shape (bsz, nugget) -> (bsz, head, nugget, head_dim)
+    index_exp = index[:, None, :, None].expand(bsz, n_head, -1, head_dim)
+    ret = DynamicCache()
+    for i_layer in range(len(cache.key_cache)):
+        # kv shape (in LLaMA) (bsz, heads, token, head_dim)
+        ret.update(
+            layer_idx=i_layer, key_states=cache.key_cache[i_layer].gather(2, index_exp),
+            value_states=cache.value_cache[i_layer].gather(2, index_exp)
+        )
+    return ret
+
+
+def gather_cache_tuple(cache: tuple, index: Tensor):
     bsz, n_head, n_token, head_dim = cache[0][0].shape
     n_layer = len(cache)
     ret = list()
