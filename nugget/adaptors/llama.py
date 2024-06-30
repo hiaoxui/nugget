@@ -357,7 +357,7 @@ def adapt_llama(
     nugget_feat = deepcopy(llama.model)
     llama.model.layers = layers
     nugget_feat.layers = deepcopy(layers[:scorer_layer])
-    nugget_feat.norm = nn.Identity()
+    # nugget_feat.norm = nn.Identity()
 
     # llama.model._use_sdpa = False
 
