@@ -10,6 +10,7 @@ try:
     from lightning.pytorch.utilities.types import STEP_OUTPUT
     import lightning.pytorch as pl
     from transformers import AutoTokenizer
+    from lightning.pytorch.utilities.rank_zero import rank_zero_only
 except ImportError:
     pass
 
@@ -56,11 +57,13 @@ class InspectCallback(Callback):
         self.val_outputs: List[NuggetInspect] = list()
         self.save_path = None
 
+    @rank_zero_only
     def on_validation_start(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         self.save_path = os.path.join(
             self.cache, 'inspect', f'step_{trainer.global_step:06}', 'cache', f'{trainer.global_rank}.jsonl'
         )
 
+    @rank_zero_only
     def on_validation_batch_end(
         self,
         trainer: "pl.Trainer",
@@ -83,6 +86,7 @@ class InspectCallback(Callback):
                 nuggets.scores[i][nuggets.mask[i]].tolist(),
             ))
 
+    @rank_zero_only
     def on_validation_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         if not self.val_outputs:
             return
