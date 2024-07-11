@@ -47,11 +47,16 @@ class NuggetScorer(torch.nn.Module):
         attention_mask = attention_mask[:, -seq_len:]
         scores = self.non_linear(transformer_out.hidden_states[-1]).squeeze(2)
         scores[~attention_mask.to(dtype=torch.bool)] = torch.finfo(scores.dtype).min
+        scores_for_selection = scores.detach().clone()
         if self.force_last:
             last_index = torch.clamp(attention_mask.sum(1, keepdim=True)-1, 0, None)
-            scores = scores.scatter(
+            # the last index of `scores_for_selection` is set as maximum to make sure it will be selected
+            scores_for_selection.scatter_(
                 1, last_index, scores.new_full([scores.shape[0], 1], torch.finfo(scores.dtype).max)
             )
+            # the scores of the last index will be set as 0.  This removes it from the computational graph.
+            scores = scores.scatter(1, last_index, scores.new_zeros([scores.shape[0], 1]))
+
         n_token = attention_mask.sum(dim=1)
         n_nugget = torch.ceil(n_token * self.ratio).to(torch.int64)
         n_nugget[n_nugget == 0] = 1
@@ -59,7 +64,7 @@ class NuggetScorer(torch.nn.Module):
         max_nugget = n_nugget.max()
         nugget_mask = torch.arange(max_nugget, device=max_nugget.device)[None, :] < n_nugget[:, None]
 
-        sorted_indices = torch.argsort(scores, dim=1, descending=True)[:, :max_nugget]
+        sorted_indices = torch.argsort(scores_for_selection, dim=1, descending=True)[:, :max_nugget]
         index_to_resort = sorted_indices.clone()
         index_to_resort[~nugget_mask] = torch.iinfo(index_to_resort.dtype).max
         indices = sorted_indices.gather(1, index_to_resort.argsort(1))
