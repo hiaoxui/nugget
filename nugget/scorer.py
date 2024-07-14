@@ -10,11 +10,11 @@ from .utils.types import Nuggets, gather_cache_tuple, gather_cache_dynamic_cache
 class NuggetScorer(torch.nn.Module):
     def __init__(
             self, base_transformer, d_model: int, feeder: NuggetScoreFeeder,
-            value_ffn: bool, ratio: float
+            value_ffn: bool, ratio: float, no_grad: bool = False
     ):
         super().__init__()
         self.base_transformer, self.feeder = base_transformer, feeder
-        self.ratio = ratio
+        self.ratio, self.no_grad = ratio, no_grad
         # self.base_transformer.requires_grad_(False)
         self.non_linear = torch.nn.Sequential(
             torch.nn.Linear(d_model, d_model, True),
@@ -45,7 +45,11 @@ class NuggetScorer(torch.nn.Module):
 
         # attention_mask could be longer than sequence length if past_kv are passed.
         attention_mask = attention_mask[:, -seq_len:]
-        scores = self.non_linear(transformer_out.hidden_states[-1]).squeeze(2)
+        if self.no_grad:
+            with torch.no_grad():
+                scores = self.non_linear(transformer_out.hidden_states[-1]).squeeze(2)
+        else:
+            scores = self.non_linear(transformer_out.hidden_states[-1]).squeeze(2)
         scores[~attention_mask.to(dtype=torch.bool)] = torch.finfo(scores.dtype).min
         scores_for_selection = scores.detach().clone()
         if self.force_last:
