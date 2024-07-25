@@ -1,4 +1,4 @@
-# supposed to be compatible with huggingface/transformers v4.42.3
+# supposed to be compatible with huggingface/transformers v4.43.2
 from typing import *
 import math
 from copy import deepcopy
@@ -21,14 +21,13 @@ class NuggetLlamaModel(LlamaModel):
             input_ids: torch.LongTensor = None,
             attention_mask: Optional[torch.Tensor] = None,
             position_ids: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[List[torch.FloatTensor]] = None,
+            past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
             inputs_embeds: Optional[torch.FloatTensor] = None,
             use_cache: Optional[bool] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
             cache_position: Optional[torch.LongTensor] = None,
-            active_layers: Optional[int] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -52,7 +51,9 @@ class NuggetLlamaModel(LlamaModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+        if (
+                use_cache and not isinstance(past_key_values, Cache) and not self.training
+        ):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(
@@ -77,15 +78,17 @@ class NuggetLlamaModel(LlamaModel):
             causal_mask = attention_mask
         # End of Nugget
 
-        # embed positions
         hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
-        for decoder_layer in self.layers[:active_layers if active_layers is not None else 1000]:
+        for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -99,6 +102,7 @@ class NuggetLlamaModel(LlamaModel):
                     output_attentions,
                     use_cache,
                     cache_position,
+                    position_embeddings,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -109,6 +113,7 @@ class NuggetLlamaModel(LlamaModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    position_embeddings=position_embeddings,
                 )
 
             hidden_states = layer_outputs[0]
@@ -166,6 +171,7 @@ class NuggetLlamaAttention(LlamaAttention):
             output_attentions: bool = False,
             use_cache: bool = False,
             cache_position: Optional[torch.LongTensor] = None,
+            position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
             **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
@@ -196,7 +202,16 @@ class NuggetLlamaAttention(LlamaAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.45 `position_ids` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -332,10 +347,6 @@ class NuggetLlamaForCausalLM(LlamaForCausalLM):
             }
         )
         return model_inputs
-
-
-def identity(x):
-    return x
 
 
 def adapt_llama(
